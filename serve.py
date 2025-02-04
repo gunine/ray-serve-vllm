@@ -160,6 +160,7 @@ model = build_app(
         "tensor-parallel-size": os.environ['TENSOR_PARALLELISM'],
         "pipeline-parallel-size": os.environ['PIPELINE_PARALLELISM'],
         "gpu_memory_utilization": 1,
-        "max_model_len": os.environ['MAX_MODEL_LEN']
+        "max_model_len": os.environ['MAX_MODEL_LEN'],
+        "trust_remote_code": os.environ['TRUST_REMOTE_CODE']
     }
 )
