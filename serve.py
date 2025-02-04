@@ -156,6 +156,7 @@ model = build_app(
     {
         "model": os.environ['MODEL_ID'],
         "model_name": os.environ.get('MODEL_NAME', None),
+        "served_model_name": os.environ.get('MODEL_NAME', None),
         "tensor-parallel-size": os.environ['TENSOR_PARALLELISM'],
         "pipeline-parallel-size": os.environ['PIPELINE_PARALLELISM'],
         "gpu_memory_utilization": os.environ['GPU_MEMORY_UTILIZATION'],
