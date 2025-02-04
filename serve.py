@@ -70,7 +70,7 @@ class VLLMDeployment:
 
                 self.engine_args.served_model_name = self.engine_args.model
 
-                logger.info(f"Updated engine args: {engine_args}")
+                logger.info(f"Updated engine args: {self.engine_args}")
                 
                 self.openai_serving_chat = OpenAIServingChat(
                     self.engine,
