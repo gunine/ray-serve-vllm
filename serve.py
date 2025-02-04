@@ -67,6 +67,11 @@ class VLLMDeployment:
                     if self.model_name == None:
                         self.model_name = self.engine_args.model
                     served_model_names = [BaseModelPath(self.model_name, self.engine_args.model)]
+
+                self.engine_args.served_model_name = self.engine_args.model
+
+                logger.info(f"Updated engine args: {engine_args}")
+                
                 self.openai_serving_chat = OpenAIServingChat(
                     self.engine,
                     model_config,
@@ -156,7 +161,6 @@ model = build_app(
     {
         "model": os.environ['MODEL_ID'],
         "model_name": os.environ.get('MODEL_NAME', None),
-        "served_model_name": os.environ.get('MODEL_ID', None),
         "tensor-parallel-size": os.environ['TENSOR_PARALLELISM'],
         "pipeline-parallel-size": os.environ['PIPELINE_PARALLELISM'],
         "gpu_memory_utilization": os.environ['GPU_MEMORY_UTILIZATION'],
