@@ -1,16 +1,18 @@
 import os
-from typing import Dict, Optional, List, Tuple, Union, Any, Tuple, Union, Any
-import logging
 
-from fastapi import FastAPI, Depends
+from typing import Dict, Optional, List
+import logging
+import traceback
+
+from fastapi import FastAPI
 from starlette.requests import Request
 from starlette.responses import StreamingResponse, JSONResponse
 
 from ray import serve
 
 from vllm.engine.arg_utils import AsyncEngineArgs
-from vllm.entrypoints.openai.serving_engine import BaseModelPath
 from vllm.engine.async_llm_engine import AsyncLLMEngine
+from vllm.entrypoints.openai.serving_engine import BaseModelPath
 from vllm.entrypoints.openai.cli_args import make_arg_parser
 from vllm.entrypoints.openai.protocol import (
     ChatCompletionRequest,
@@ -20,33 +22,22 @@ from vllm.entrypoints.openai.protocol import (
 from vllm.entrypoints.openai.serving_chat import OpenAIServingChat
 from vllm.entrypoints.openai.serving_engine import LoRAModulePath
 from vllm.utils import FlexibleArgumentParser
-from functools import wraps
-from starlette.middleware.cors import CORSMiddleware
 
-# Configure logging
 logger = logging.getLogger("ray.serve")
-logger.setLevel(logging.DEBUG)
 
 app = FastAPI()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 @serve.deployment(name="VLLMDeployment")
 @serve.ingress(app)
 class VLLMDeployment:
     def __init__(
-            self,
-            engine_args: AsyncEngineArgs,
-            response_role: str,
-            lora_modules: Optional[List[LoRAModulePath]] = None,
-            chat_template: Optional[str] = None,
-            model_name: Optional[str] = None,
+        self,
+        engine_args: AsyncEngineArgs,
+        response_role: str,
+        lora_modules: Optional[List[LoRAModulePath]] = None,
+        chat_template: Optional[str] = None,
+        model_name: Optional[str] = None,
     ):
         logger.info(f"Starting with engine args: {engine_args}")
         self.openai_serving_chat = None
@@ -59,11 +50,13 @@ class VLLMDeployment:
 
     @app.post("/v1/chat/completions")
     async def create_chat_completion(
-            self,
-            request: ChatCompletionRequest,
-            raw_request: Request,
+        self, request: ChatCompletionRequest, raw_request: Request
     ):
-        """OpenAI-compatible HTTP endpoint"""
+        """OpenAI-compatible HTTP endpoint.
+
+        API reference:
+            - https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html
+        """
         try:
             if not self.openai_serving_chat:
                 model_config = await self.engine.get_model_config()
@@ -85,37 +78,38 @@ class VLLMDeployment:
                     prompt_adapters=None,
                     request_logger=None,
                 )
-            logger.info("Processing chat completion request")
-            logger.debug(f"Request: {request}")
-
+            logger.info(f"Request: {request}")
             generator = await self.openai_serving_chat.create_chat_completion(
                 request, raw_request
             )
-
             if isinstance(generator, ErrorResponse):
-                logger.error(f"Error response: {generator}")
                 return JSONResponse(
                     content=generator.model_dump(), status_code=generator.code
                 )
-
             if request.stream:
-                logger.debug("Returning streaming response")
                 return StreamingResponse(content=generator, media_type="text/event-stream")
             else:
                 assert isinstance(generator, ChatCompletionResponse)
-                logger.debug("Returning JSON response")
                 return JSONResponse(content=generator.model_dump())
-
         except Exception as e:
+            full_traceback = traceback.format_exc()
             logger.error(f"Error in chat completion: {str(e)}", exc_info=True)
             return JSONResponse(
-                content={"error": str(e)},
+                content={"error": str(e), "traceback": full_traceback},
                 status_code=500
             )
 
+    @app.get("/v1/models")
+    def get_models(self):
+        # Logic to list available models
+        return {"models": [self.model_name]}
 
 def parse_vllm_args(cli_args: Dict[str, str]):
-    """Parses vLLM args based on CLI inputs."""
+    """Parses vLLM args based on CLI inputs.
+
+    Currently uses argparse because vLLM doesn't expose Python models for all of the
+    config options we want to support.
+    """
     exclude_args_from_engine = ["model_name"]
     parser = FlexibleArgumentParser(description="vLLM CLI")
     parser = make_arg_parser(parser)
@@ -131,19 +125,24 @@ def parse_vllm_args(cli_args: Dict[str, str]):
                 arg_strings.extend([f"--{key}"])
         else:
             arg_strings.extend([f"--{key}", str(value)])
-    logger.info(f"Parsing CLI args: {arg_strings}")
+    logger.info(arg_strings)
     parsed_args = parser.parse_args(args=arg_strings)
     return parsed_args
 
 
-
 def build_app(cli_args: Dict[str, str]) -> serve.Application:
-    """Builds the Serve app based on CLI arguments."""
+    """Builds the Serve app based on CLI arguments.
+
+    See https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html#command-line-arguments-for-the-server
+    for the complete set of arguments.
+
+    Supported engine arguments: https://docs.vllm.ai/en/latest/models/engine_args.html.
+    """  # noqa: E501
     parsed_args = parse_vllm_args(cli_args)
     engine_args = AsyncEngineArgs.from_cli_args(parsed_args)
     engine_args.worker_use_ray = True
+    engine_args.trust_remote_code = True
 
-    logger.info("Building Serve application")
     return VLLMDeployment.bind(
         engine_args,
         parsed_args.response_role,
@@ -159,8 +158,7 @@ model = build_app(
         "model_name": os.environ.get('MODEL_NAME', None),
         "tensor-parallel-size": os.environ['TENSOR_PARALLELISM'],
         "pipeline-parallel-size": os.environ['PIPELINE_PARALLELISM'],
-        "gpu_memory_utilization": 1,
-        "max_model_len": os.environ['MAX_MODEL_LEN'],
-        "trust_remote_code": os.environ['TRUST_REMOTE_CODE']
+        "gpu_memory_utilization": os.environ['GPU_MEMORY_UTILIZATION'],
+        "max_model_len": os.environ['MAX_MODEL_LEN']
     }
 )
