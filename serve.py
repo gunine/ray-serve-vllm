@@ -40,6 +40,8 @@ class VLLMDeployment:
         model_name: Optional[str] = None,
     ):
         logger.info(f"Starting with engine args: {engine_args}")
+        logger.info(f"Chat Template: {chat_template}")
+        
         self.openai_serving_chat = None
         self.engine_args = engine_args
         self.response_role = response_role
@@ -67,8 +69,6 @@ class VLLMDeployment:
                     if self.model_name == None:
                         self.model_name = self.engine_args.model
                     served_model_names = [BaseModelPath(self.model_name, self.engine_args.model)]
-
-                logger.info(f"Chat Template: {self.chat_template}")
                 
                 self.openai_serving_chat = OpenAIServingChat(
                     self.engine,
