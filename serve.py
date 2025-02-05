@@ -67,6 +67,8 @@ class VLLMDeployment:
                     if self.model_name == None:
                         self.model_name = self.engine_args.model
                     served_model_names = [BaseModelPath(self.model_name, self.engine_args.model)]
+
+                logger.info(f"Chat Template: {self.chat_template}")
                 
                 self.openai_serving_chat = OpenAIServingChat(
                     self.engine,
